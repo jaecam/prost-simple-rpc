@@ -9,8 +9,7 @@ edition = "2021"
 
 [dependencies]
 bytes = "1.10.1"
-failure = "0.1.2"
-failure_derive = "0.1.2"
+thiserror = "2.0.17"
 futures = "0.3.31"
 prost = "0.14.1"
 pin-project = "1.0.12"

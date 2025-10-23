@@ -1,4 +1,5 @@
 //! Utility functions used by generated code; this is *not* part of the crate's public API!
+use std::error::Error as StdError;
 use std::future::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
@@ -122,7 +123,7 @@ where
 pub fn decode<M, E>(buf: bytes::Bytes) -> error::Result<M, E>
 where
     M: prost::Message + Default,
-    E: failure::Fail,
+    E: StdError,
 {
     let message = prost::Message::decode(buf)?;
     Ok(message)
@@ -132,7 +133,7 @@ where
 pub fn encode<M, E>(message: M) -> error::Result<bytes::Bytes, E>
 where
     M: prost::Message,
-    E: failure::Fail,
+    E: StdError,
 {
     let len = prost::Message::encoded_len(&message);
     let mut buf = ::bytes::BytesMut::with_capacity(len);
