@@ -30,6 +30,8 @@
 
 use std::fmt;
 
+use heck::ToUpperCamelCase;
+
 /// The service generator to be used with `prost-build` to generate RPC implementations for
 /// `prost-simple-rpc`.
 ///
@@ -49,7 +51,6 @@ impl ServiceGenerator {
 
 impl prost_build::ServiceGenerator for ServiceGenerator {
     fn generate(&mut self, service: prost_build::Service, mut buf: &mut String) {
-        use heck::CamelCase;
         use std::fmt::Write;
 
         let descriptor_name = format!("{}Descriptor", service.name);
@@ -89,7 +90,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
                 "    /// A future resulting from calling `{name}`.
     type {camel_case_name}Future: ::futures::Future<Item = {output_type}, Error = Self::Error> + Send;",
                 name = method.name,
-                camel_case_name = method.name.to_camel_case(),
+                camel_case_name = method.name.to_upper_camel_case(),
                 output_type = method.output_type
             ).unwrap();
 
@@ -98,7 +99,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
                 trait_methods,
                 r#"    fn {name}(&self, input: {input_type}) -> Self::{camel_case_name}Future;"#,
                 name = method.name,
-                camel_case_name = method.name.to_camel_case(),
+                camel_case_name = method.name.to_upper_camel_case(),
                 input_type = method.input_type
             )
             .unwrap();
@@ -116,7 +117,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
             writeln!(
                 client_types,
                 "    type {camel_case_name}Future = ::prost_simple_rpc::__rt::ClientFuture<H, {input_type}, {output_type}>;",
-                camel_case_name = method.name.to_camel_case(),
+                camel_case_name = method.name.to_upper_camel_case(),
                 input_type = method.input_type,
                 output_type = method.output_type,
             ).unwrap();
@@ -127,7 +128,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
         {client_name}::{name}_inner(self.0.clone(), input)
     }}"#,
                 name = method.name,
-                camel_case_name = method.name.to_camel_case(),
+                camel_case_name = method.name.to_upper_camel_case(),
                 input_type = method.input_type,
                 client_name = format!("{}Client", service.name)
             )
@@ -140,7 +141,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
     }}"#,
                 trait_name = service.name,
                 name = method.name,
-                camel_case_name = method.name.to_camel_case(),
+                camel_case_name = method.name.to_upper_camel_case(),
                 method_descriptor_name = method_descriptor_name,
                 proto_name = method.proto_name,
                 input_type = method.input_type,
