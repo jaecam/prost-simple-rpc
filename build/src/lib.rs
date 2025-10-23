@@ -88,7 +88,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
             writeln!(
                 trait_types,
                 "    /// A future resulting from calling `{name}`.
-    type {camel_case_name}Future: ::futures::Future<Item = {output_type}, Error = Self::Error> + Send;",
+    type {camel_case_name}Future: ::futures::Future<Output = ::std::result::Result<{output_type}, Self::Error>> + Send;",
                 name = method.name,
                 camel_case_name = method.name.to_upper_camel_case(),
                 output_type = method.output_type
@@ -182,12 +182,12 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
             write!(
                 match_handle_methods,
                 r#"{}
-                Box::new(
-                    ::futures::future::result(::prost_simple_rpc::__rt::decode(input))
+                Box::pin(
+                    ::futures::future::ready(::prost_simple_rpc::__rt::decode(input))
                         .and_then(move |i| {{
                             service.{name}(i).map_err(|e| ::prost_simple_rpc::error::Error::execution(e))
                         }})
-                        .and_then(::prost_simple_rpc::__rt::encode)),
+                        .and_then(move |o| ::futures::future::ready(::prost_simple_rpc::__rt::encode(o)))),
 "#,
                 case,
                 name = method.name
@@ -198,7 +198,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
         write!(
             buf,
             r#"pub trait {name} {{
-    type Error: ::failure::Fail;
+    type Error: ::std::error::Error + Send;
 {trait_types}
 {trait_methods}}}
 /// A service descriptor for a `{name}`.
@@ -233,7 +233,7 @@ impl<A> {server_name}<A> where A: {name} + Clone + Send + 'static {{
         input: ::bytes::Bytes)
         -> <Self as ::prost_simple_rpc::handler::Handler>::CallFuture
     {{
-        use futures::Future;
+        use ::futures::future::{{Future, FutureExt, TryFutureExt}};
 
         match method {{
 {match_handle_methods}        }}
@@ -255,10 +255,10 @@ impl ::prost_simple_rpc::descriptor::ServiceDescriptor for {descriptor_name} {{
 {list_enum_methods}        ]
     }}
 }}
-impl<A> ::prost_simple_rpc::handler::Handler for {server_name}<A> where A: {name} + Clone + Send + 'static {{
+impl<A> ::prost_simple_rpc::handler::Handler for {server_name}<A> where A: {name} + Clone + Send + 'static, <A as {name}>::Error: Send {{
     type Error = ::prost_simple_rpc::error::Error<<A as {name}>::Error>;
     type Descriptor = {descriptor_name};
-    type CallFuture = Box<::futures::Future<Item = ::bytes::Bytes, Error = Self::Error> + Send>;
+    type CallFuture = ::std::pin::Pin<Box<dyn ::futures::Future<Output = ::std::result::Result<::bytes::Bytes, Self::Error>> + Send>>;
 
     fn call(
         &self,
@@ -269,9 +269,9 @@ impl<A> ::prost_simple_rpc::handler::Handler for {server_name}<A> where A: {name
         {server_name}::call_inner(self.0.clone(), method, input)
     }}
 }}
-impl<H> {client_name}<H> where H: ::prost_simple_rpc::handler::Handler<Descriptor = {descriptor_name}> {{
+impl<H> {client_name}<H> where H: ::prost_simple_rpc::handler::Handler<Descriptor = {descriptor_name}>, H::Error: Send {{
 {client_own_methods}}}
-impl<H> {name} for {client_name}<H> where H: ::prost_simple_rpc::handler::Handler<Descriptor = {descriptor_name}> {{
+impl<H> {name} for {client_name}<H> where H: ::prost_simple_rpc::handler::Handler<Descriptor = {descriptor_name}>, H::Error: Send {{
     type Error = ::prost_simple_rpc::error::Error<H::Error>;
 {client_types}
 {client_methods}}}

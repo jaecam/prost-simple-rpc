@@ -1,10 +1,9 @@
 //! Utility functions used by generated code; this is *not* part of the crate's public API!
+use futures::task::{Context, Poll};
+use futures::Future;
 use std::error::Error as StdError;
-use std::future::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
-use std::task::Context;
-use std::task::Poll;
 
 use pin_project::pin_project;
 
