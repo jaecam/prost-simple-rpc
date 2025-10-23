@@ -1,9 +1,10 @@
 //! Traits for defining generic RPC handlers.
+use std::future::Future;
+
 use bytes;
 use failure;
-use futures;
 
-use descriptor;
+use crate::descriptor;
 
 /// An implementation of a specific RPC handler.
 ///
@@ -15,7 +16,7 @@ pub trait Handler: Clone + Send + 'static {
     /// The service descriptor for the service whose requests this handler can handle.
     type Descriptor: descriptor::ServiceDescriptor;
     /// The future that results from a call to the `call` method of this trait.
-    type CallFuture: futures::Future<Item = bytes::Bytes, Error = Self::Error> + Send;
+    type CallFuture: Future<Output = Result<bytes::Bytes, Self::Error>> + Send;
 
     /// Perform a raw call to the specified service and method.
     fn call(

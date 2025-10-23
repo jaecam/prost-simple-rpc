@@ -172,13 +172,6 @@
 #![cfg_attr(feature = "dev", feature(plugin))]
 #![cfg_attr(feature = "dev", plugin(clippy))]
 
-extern crate bytes;
-extern crate failure;
-#[macro_use]
-extern crate failure_derive;
-extern crate futures;
-extern crate prost;
-
 #[doc(hidden)]
 pub mod __rt;
 pub mod descriptor;

@@ -1,32 +1,33 @@
 //! Utility functions used by generated code; this is *not* part of the crate's public API!
-use std::marker;
-use std::mem;
+use std::future::Future;
+use std::marker::PhantomData;
+use std::pin::Pin;
+use std::task::Context;
+use std::task::Poll;
 
-use bytes;
-use failure;
-use futures;
-use prost;
+use pin_project::pin_project;
 
-use descriptor;
-use error;
-use handler;
+use crate::descriptor;
+use crate::error;
+use crate::handler;
 
 /// A future returned by a client call.
 #[derive(Debug)]
+#[pin_project(project = ClientFutureProj, project_replace = ClientFutureReplace)]
 pub enum ClientFuture<H, I, O>
 where
     H: handler::Handler,
 {
     /// The message has not yet been encoded.
     Encode(
-        I,
-        H,
-        <H::Descriptor as descriptor::ServiceDescriptor>::Method,
+        Option<I>,
+        Option<H>,
+        Option<<H::Descriptor as descriptor::ServiceDescriptor>::Method>,
     ),
     /// The message was sent over RPC but the call future is not yet done.
-    Call(H::CallFuture),
+    Call(#[pin] H::CallFuture),
     /// We have returned the response to the caller.
-    Done(marker::PhantomData<O>),
+    Done(PhantomData<O>),
 }
 
 impl<H, I, O> ClientFuture<H, I, O>
@@ -40,37 +41,78 @@ where
         input: I,
         method: <H::Descriptor as descriptor::ServiceDescriptor>::Method,
     ) -> Self {
-        ClientFuture::Encode(input, handler, method)
+        ClientFuture::Encode(Some(input), Some(handler), Some(method))
     }
 }
 
-impl<H, I, O> futures::Future for ClientFuture<H, I, O>
+impl<H, I, O> Future for ClientFuture<H, I, O>
 where
     H: handler::Handler,
     I: prost::Message,
     O: prost::Message + Default,
 {
-    type Item = O;
-    type Error = error::Error<H::Error>;
+    type Output = Result<O, error::Error<H::Error>>;
 
-    fn poll(&mut self) -> futures::Poll<Self::Item, Self::Error> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         loop {
-            match mem::replace(self, ClientFuture::Done(marker::PhantomData)) {
-                ClientFuture::Encode(input, handler, method) => {
-                    let input_bytes = encode(input)?;
-                    *self = ClientFuture::Call(handler.call(method, input_bytes));
+            // Decide what to do next inside a block so the projection borrow ends
+            enum Step<H, I, O>
+            where
+                H: handler::Handler,
+                I: prost::Message,
+                O: prost::Message + Default,
+            {
+                Replace(ClientFuture<H, I, O>),
+                Return(Poll<<ClientFuture<H, I, O> as Future>::Output>),
+            }
+
+            let step = {
+                match self.as_mut().project() {
+                    ClientFutureProj::Encode(input, handler, method) => {
+                        let input = input
+                            .take()
+                            .expect("Encode: polled after transition (input)");
+                        let h = handler
+                            .take()
+                            .expect("Encode: polled after transition (handler)");
+                        let m = method
+                            .take()
+                            .expect("Encode: polled after transition (method)");
+
+                        let bytes = encode(input)?;
+                        let fut = h.call(m, bytes);
+
+                        Step::Replace(ClientFuture::Call(fut))
+                    }
+
+                    ClientFutureProj::Call(fut) => match fut.poll(cx) {
+                        Poll::Pending => Step::Return(Poll::Pending),
+                        Poll::Ready(Ok(bytes)) => {
+                            let out = decode::<O, _>(bytes)?;
+                            Step::Return(Poll::Ready(Ok(out)))
+                        }
+                        Poll::Ready(Err(e)) => {
+                            Step::Return(Poll::Ready(Err(error::Error::execution(e))))
+                        }
+                    },
+
+                    ClientFutureProj::Done(_) => panic!("polled after completion"),
                 }
-                ClientFuture::Call(mut future) => match future.poll() {
-                    Ok(futures::Async::Ready(bytes)) => {
-                        return Ok(futures::Async::Ready(decode::<O, _>(bytes)?));
-                    }
-                    Ok(futures::Async::NotReady) => {
-                        *self = ClientFuture::Call(future);
-                        return Ok(futures::Async::NotReady);
-                    }
-                    Err(err) => return Err(error::Error::execution(err)),
-                },
-                ClientFuture::Done(_) => panic!("cannot poll a client future twice"),
+            };
+
+            match step {
+                Step::Replace(new_state) => {
+                    let _old: ClientFutureReplace<_, _, _> =
+                        self.as_mut().project_replace(new_state);
+                    continue;
+                }
+                Step::Return(Poll::Pending) => return Poll::Pending,
+                Step::Return(Poll::Ready(res)) => {
+                    let _old = self
+                        .as_mut()
+                        .project_replace(ClientFuture::Done(PhantomData));
+                    return Poll::Ready(res);
+                }
             }
         }
     }

@@ -28,9 +28,6 @@
 #![cfg_attr(feature = "dev", feature(plugin))]
 #![cfg_attr(feature = "dev", plugin(clippy))]
 
-extern crate heck;
-extern crate prost_build;
-
 use std::fmt;
 
 /// The service generator to be used with `prost-build` to generate RPC implementations for
@@ -103,7 +100,8 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
                 name = method.name,
                 camel_case_name = method.name.to_camel_case(),
                 input_type = method.input_type
-            ).unwrap();
+            )
+            .unwrap();
 
             ServiceGenerator::write_comments(&mut enum_methods, 4, &method.comments).unwrap();
             writeln!(enum_methods, "    {name},", name = method.proto_name).unwrap();
@@ -112,7 +110,8 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
                 "            {service_name}MethodDescriptor::{name},",
                 service_name = service.name,
                 name = method.proto_name
-            ).unwrap();
+            )
+            .unwrap();
 
             writeln!(
                 client_types,
@@ -131,7 +130,8 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
                 camel_case_name = method.name.to_camel_case(),
                 input_type = method.input_type,
                 client_name = format!("{}Client", service.name)
-            ).unwrap();
+            )
+            .unwrap();
 
             writeln!(
                 client_own_methods,
@@ -158,22 +158,26 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
                 match_input_type_methods,
                 "{}::std::any::TypeId::of::<{}>(),",
                 case, method.input_type
-            ).unwrap();
+            )
+            .unwrap();
             writeln!(
                 match_input_proto_type_methods,
                 "{}{:?},",
                 case, method.input_proto_type
-            ).unwrap();
+            )
+            .unwrap();
             writeln!(
                 match_output_type_methods,
                 "{}::std::any::TypeId::of::<{}>(),",
                 case, method.output_type
-            ).unwrap();
+            )
+            .unwrap();
             writeln!(
                 match_output_proto_type_methods,
                 "{}{:?},",
                 case, method.output_proto_type
-            ).unwrap();
+            )
+            .unwrap();
             write!(
                 match_handle_methods,
                 r#"{}

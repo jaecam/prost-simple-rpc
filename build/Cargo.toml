@@ -1,4 +1,5 @@
 [package]
+edition = "2021"
 authors = ["David Flemström <david.flemstrom@gmail.com>"]
 name = "prost-simple-rpc-build"
 description = "Build script helpers for prost-simple-rpc"
