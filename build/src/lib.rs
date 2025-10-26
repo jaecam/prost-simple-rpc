@@ -181,17 +181,19 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
             .unwrap();
             write!(
                 match_handle_methods,
-                r#"{}
-                Box::pin(
-                    ::futures::future::ready(::prost_simple_rpc::__rt::decode(input))
-                        .and_then(move |i| {{
-                            service.{name}(i).map_err(|e| ::prost_simple_rpc::error::Error::execution(e))
-                        }})
-                        .and_then(move |o| ::futures::future::ready(::prost_simple_rpc::__rt::encode(o)))),
+                r#"{} {{
+                    let dec = ::prost_simple_rpc::__rt::decode(input)?;
+                    let resp = service
+                        .{name}(dec)
+                        .map_err(::prost_simple_rpc::error::Error::execution)
+                        .await?;
+                    ::prost_simple_rpc::__rt::encode(resp)
+                }}
 "#,
                 case,
                 name = method.name
-            ).unwrap();
+            )
+            .unwrap();
         }
 
         ServiceGenerator::write_comments(&mut buf, 0, &service.comments).unwrap();
@@ -226,18 +228,6 @@ impl<A> {server_name}<A> where A: {name} + Clone + Send + 'static {{
     pub fn new(service: A) -> {server_name}<A> {{
         {server_name}(service)
     }}
-
-    fn call_inner(
-        service: A,
-        method: {method_descriptor_name},
-        input: ::bytes::Bytes)
-        -> <Self as ::prost_simple_rpc::handler::Handler>::CallFuture
-    {{
-        use ::futures::future::{{Future, FutureExt, TryFutureExt}};
-
-        match method {{
-{match_handle_methods}        }}
-    }}
 }}
 impl<H> {client_name}<H> where H: ::prost_simple_rpc::handler::Handler<Descriptor = {descriptor_name}> {{
     /// Creates a new client instance that delegates all method calls to the supplied handler.
@@ -258,7 +248,7 @@ impl ::prost_simple_rpc::descriptor::ServiceDescriptor for {descriptor_name} {{
 impl<A> ::prost_simple_rpc::handler::Handler for {server_name}<A> where A: {name} + Clone + Send + 'static, <A as {name}>::Error: Send {{
     type Error = ::prost_simple_rpc::error::Error<<A as {name}>::Error>;
     type Descriptor = {descriptor_name};
-    type CallFuture = ::std::pin::Pin<Box<dyn ::futures::Future<Output = ::std::result::Result<::bytes::Bytes, Self::Error>> + Send>>;
+    type CallFuture = impl ::futures::Future<Output = ::std::result::Result<::bytes::Bytes, Self::Error>> + Send;
 
     fn call(
         &self,
@@ -266,8 +256,15 @@ impl<A> ::prost_simple_rpc::handler::Handler for {server_name}<A> where A: {name
         input: ::bytes::Bytes)
         -> Self::CallFuture
     {{
-        {server_name}::call_inner(self.0.clone(), method, input)
-    }}
+        use ::futures::future::{{Future, FutureExt, TryFutureExt}};
+
+        let service = self.0.clone();
+
+        async move {{
+            match method {{
+    {match_handle_methods}        }}
+        }}
+    }}    
 }}
 impl<H> {client_name}<H> where H: ::prost_simple_rpc::handler::Handler<Descriptor = {descriptor_name}>, H::Error: Send {{
 {client_own_methods}}}
