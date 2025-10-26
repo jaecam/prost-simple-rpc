@@ -88,7 +88,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
             writeln!(
                 trait_types,
                 "    /// A future resulting from calling `{name}`.
-    type {camel_case_name}Future: ::futures::Future<Output = ::std::result::Result<{output_type}, Self::Error>> + Send;",
+    type {camel_case_name}Future: ::std::future::Future<Output = ::std::result::Result<{output_type}, Self::Error>> + Send;",
                 name = method.name,
                 camel_case_name = method.name.to_upper_camel_case(),
                 output_type = method.output_type
@@ -185,8 +185,8 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
                     let dec = ::prost_simple_rpc::__rt::decode(input)?;
                     let resp = service
                         .{name}(dec)
-                        .map_err(::prost_simple_rpc::error::Error::execution)
-                        .await?;
+                        .await
+                        .map_err(::prost_simple_rpc::error::Error::execution)?;
                     ::prost_simple_rpc::__rt::encode(resp)
                 }}
 "#,
@@ -248,7 +248,7 @@ impl ::prost_simple_rpc::descriptor::ServiceDescriptor for {descriptor_name} {{
 impl<A> ::prost_simple_rpc::handler::Handler for {server_name}<A> where A: {name} + Clone + Send + 'static, <A as {name}>::Error: Send {{
     type Error = ::prost_simple_rpc::error::Error<<A as {name}>::Error>;
     type Descriptor = {descriptor_name};
-    type CallFuture = impl ::futures::Future<Output = ::std::result::Result<::bytes::Bytes, Self::Error>> + Send;
+    type CallFuture = impl ::std::future::Future<Output = ::std::result::Result<::bytes::Bytes, Self::Error>> + Send;
 
     fn call(
         &self,
@@ -256,8 +256,6 @@ impl<A> ::prost_simple_rpc::handler::Handler for {server_name}<A> where A: {name
         input: ::bytes::Bytes)
         -> Self::CallFuture
     {{
-        use ::futures::future::{{Future, FutureExt, TryFutureExt}};
-
         let service = self.0.clone();
 
         async move {{
